@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>硼同位素 pH 计计算器</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        /* CSS 样式保持不变，因为您对板式设计满意 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #eef4f8; 
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #1a5a9c;
+            text-align: center;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+        
+        /* 输入和控制区域 */
+        .input-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            align-items: end;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-radius: 8px;
+            background-color: #f6f9fc;
+            border: 1px solid #e0e6ed;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+            font-size: 0.95em;
+        }
+        .input-group input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #c8d3e6;
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        .input-group input[type="number"]:focus {
+            border-color: #1a5a9c;
+            box-shadow: 0 0 0 2px rgba(26, 90, 156, 0.2);
+            outline: none;
+        }
+        
+        /* 按钮样式 */
+        #calcButton {
+            grid-column: span 1;
+            padding: 12px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        
+        @media (max-width: 900px) {
+            .input-grid { grid-template-columns: repeat(2, 1fr); }
+            #calcButton { grid-column: span 2; }
+        }
+        @media (max-width: 600px) {
+            .input-grid { grid-template-columns: 1fr; }
+            #calcButton { grid-column: span 1; }
+        }
+
+        #calcButton:hover {
+            background-color: #1e7e34;
+            transform: translateY(-1px);
+        }
+
+        /* 图表容器 - 解决画幅过长问题 */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            margin-bottom: 30px;
+            box-sizing: border-box;
+        }
+        #boronChart {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* 结果区域 */
+        .results {
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #e8f7ec;
+            border-left: 5px solid #28a745;
+        }
+        .results h3 {
+            color: #1a5a9c;
+            margin-top: 0;
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 10px;
+        }
+        .results p {
+            margin: 8px 0;
+            font-size: 1.1em;
+        }
+        .results strong {
+            color: #d9534f;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🔬 硼同位素平衡计算与可视化</h1>
+
+    <div class="input-grid">
+        <div class="input-group">
+            <label for="pKB">硼酸解离常数 pK<sub>B</sub>*:</label>
+            <input type="number" id="pKB" value="8.597" step="0.001">
+        </div>
+        <div class="input-group">
+            <label for="alpha">分馏因子 α (B₄/B₃):</label>
+            <input type="number" id="alpha" value="0.97352" step="0.00001">
+        </div>
+        <div class="input-group">
+            <label for="d11B_sw">溶液总 δ¹¹B (‰):</label>
+            <input type="number" id="d11B_sw" value="39.6" step="0.1">
+        </div>
+        <div class="input-group">
+            <label for="target_pH">目标 pH 值:</label>
+            <input type="number" id="target_pH" value="8.1" step="0.01">
+        </div>
+        <button id="calcButton" onclick="updateChartAndResults()">计算并绘图</button>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="boronChart"></canvas>
+    </div>
+
+    <div class="results">
+        <h3>🎯 目标点 (pH = <span id="output_pH">8.10</span>) 处的同位素组成:</h3>
+        <p>硼酸 (B(OH)₃, δ¹¹B₃): <strong id="d11B_3_result">等待计算...</strong> ‰</p>
+        <p>硼酸根 (B(OH)₄⁻, δ¹¹B₄): <strong id="d11B_4_result">等待计算...</strong> ‰</p>
+    </div>
+</div>
+
+<script>
+    // **关键修改：不再注册 ChartDataLabels 插件**
+
+    let boronChart;
+    
+    // --- 核心计算函数 ---
+    function calculateBoron(pH, pKB, d11B_sw, alpha) {
+        const f_B4 = 1 / (1 + Math.pow(10, (pKB - pH)));
+        const epsilon = 1000 * (alpha - 1); 
+        const d11B_3 = d11B_sw - f_B4 * epsilon;
+        const d11B_4 = d11B_3 + epsilon;
+
+        return { d11B_3, d11B_4 };
+    }
+
+    // --- 生成曲线数据 ({x, y} 格式) ---
+    function generateCurveData(pKB, d11B_sw, alpha) {
+        const d11B_3_data = [];
+        const d11B_4_data = [];
+        const d11B_sw_line = [];
+        
+        for (let pH = 7.0; pH <= 10.0; pH += 0.05) {
+            const pH_fixed = parseFloat(pH.toFixed(2));
+            const result = calculateBoron(pH_fixed, pKB, d11B_sw, alpha);
+            
+            d11B_3_data.push({ x: pH_fixed, y: result.d11B_3 });
+            d11B_4_data.push({ x: pH_fixed, y: result.d11B_4 });
+            d11B_sw_line.push({ x: pH_fixed, y: d11B_sw });
+        }
+        
+        return { d11B_3_data, d11B_4_data, d11B_sw_line };
+    }
+
+    // --- 初始化 Chart.js 图表 ---
+    function initChart() {
+        const ctx = document.getElementById('boronChart').getContext('2d');
+        
+        const initialData = generateCurveData(
+            parseFloat(document.getElementById('pKB').value), 
+            parseFloat(document.getElementById('d11B_sw').value), 
+            parseFloat(document.getElementById('alpha').value)
+        );
+        
+        boronChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: '溶液总 δ¹¹B',
+                        data: initialData.d11B_sw_line,
+                        borderColor: 'rgba(50, 50, 50, 0.5)',
+                        borderWidth: 2,
+                        borderDash: [6, 4], 
+                        // **关键修改：让数据点可见 (radius > 0) 才能触发 Tooltip**
+                        pointRadius: 0, 
+                        pointHoverRadius: 6, // 悬停时点变大
+                        fill: false,
+                        parsing: false,
+                    },
+                    {
+                        label: 'δ¹¹B₃ (硼酸)',
+                        data: initialData.d11B_3_data,
+                        borderColor: '#007bff',
+                        borderWidth: 3,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        fill: false,
+                        parsing: false,
+                    },
+                    {
+                        label: 'δ¹¹B₄ (硼酸根)',
+                        data: initialData.d11B_4_data,
+                        borderColor: '#ff6384',
+                        borderWidth: 3,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        fill: false,
+                        parsing: false,
+                    },
+                    // 目标点（散点图层）
+                    {
+                        label: '目标点',
+                        data: [], 
+                        type: 'scatter',
+                        backgroundColor: '#28a745', 
+                        borderColor: 'white',
+                        borderWidth: 2,
+                        pointRadius: 8,
+                        pointStyle: 'crossRot',
+                        pointHoverRadius: 10,
+                        // 目标点不需要 Tooltip，我们直接在结果区显示
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            usePointStyle: true,
+                            font: { size: 14 }
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: '硼同位素组分 δ¹¹B 随 pH 的理论分馏曲线',
+                        font: { size: 18 }
+                    },
+                    // **关键修改：配置 Tooltip 以显示精确的 pH 和 δ¹¹B**
+                    tooltip: {
+                        mode: 'nearest',
+                        intersect: false,
+                        callbacks: {
+                            title: function(context) {
+                                // 显示 pH 值作为 Tooltip 标题
+                                return 'pH: ' + context[0].parsed.x.toFixed(2);
+                            },
+                            label: function(context) {
+                                // 显示曲线标签和 δ¹¹B 值
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed.y.toFixed(4) + ' ‰';
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'pH',
+                            font: { size: 16, weight: 'bold' }
+                        },
+                        min: 7.0,
+                        max: 10.0,
+                        type: 'linear'
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'δ¹¹B (‰)',
+                            font: { size: 16, weight: 'bold' }
+                        },
+                        beginAtZero: false 
+                    }
+                }
+            }
+        });
+        
+        updateChartAndResults();
+    }
+
+    // --- 更新图表和结果 ---
+    function updateChartAndResults() {
+        const pKB = parseFloat(document.getElementById('pKB').value);
+        const alpha = parseFloat(document.getElementById('alpha').value);
+        const d11B_sw = parseFloat(document.getElementById('d11B_sw').value);
+        const target_pH = parseFloat(document.getElementById('target_pH').value);
+
+        if (isNaN(pKB) || isNaN(alpha) || isNaN(d11B_sw) || isNaN(target_pH)) {
+            alert("请输入有效的数值！");
+            return;
+        }
+
+        const newCurveData = generateCurveData(pKB, d11B_sw, alpha);
+        
+        boronChart.data.datasets[0].data = newCurveData.d11B_sw_line;
+        boronChart.data.datasets[1].data = newCurveData.d11B_3_data;
+        boronChart.data.datasets[2].data = newCurveData.d11B_4_data;
+
+        const targetResult = calculateBoron(target_pH, pKB, d11B_sw, alpha);
+
+        // 目标点的散点图层
+        boronChart.data.datasets[3].data = [
+            { x: target_pH, y: targetResult.d11B_3, label: 'B₃' },
+            { x: target_pH, y: targetResult.d11B_4, label: 'B₄' }
+        ];
+
+        boronChart.update();
+
+        // 输出结果到 HTML 文本区域
+        document.getElementById('output_pH').textContent = target_pH.toFixed(2);
+        document.getElementById('d11B_3_result').textContent = targetResult.d11B_3.toFixed(4);
+        document.getElementById('d11B_4_result').textContent = targetResult.d11B_4.toFixed(4);
+    }
+
+    window.onload = initChart;
+</script>
+
+</body>
+</html>
